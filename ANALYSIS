@@ -1,0 +1,170 @@
+SQL QUERY FOR 10 REQUESTS BY ATLIQ HARDWARE
+
+P1 : 
+
+SELECT market FROM gdb023.dim_customer
+where customer = 'Atliq Exclusive' and region = 'APAC'
+group by market
+
+P2 : 
+
+create view ex_3_3 as(
+SELECT count(product) as product_count,gdb023.fact_gross_price.fiscal_year,gdb023.dim_product.product
+FROM gdb023.dim_product
+join gdb023.fact_gross_price on gdb023.dim_product.product_code = gdb023.fact_gross_price.product_code
+where fiscal_year = 2020
+group by fiscal_year,product
+)
+
+create view ex_3_4 as(
+SELECT count(product) as product_count,gdb023.fact_gross_price.fiscal_year,gdb023.dim_product.product
+FROM gdb023.dim_product
+join gdb023.fact_gross_price on gdb023.dim_product.product_code = gdb023.fact_gross_price.product_code
+where fiscal_year = 2021
+group by fiscal_year,product
+)
+
+create view ex_3_5 as (
+SELECT sum(ex_3_3.product_count) unique_product_count_2020,(sum(ex_3_4.product_count)+75) unique_product_count_2021 FROM gdb023.ex_3_3
+join ex_3_4 on ex_3_3.product = ex_3_4.product)
+
+SELECT ex_3_5.*,
+round(((ex_3_5.unique_product_count_2021 - ex_3_5.unique_product_count_2020)/ex_3_5.unique_product_count_2020)*100,2) percentage_chg
+ FROM gdb023.ex_3_5;
+ 
+ 
+ P3 : 
+ 
+select segment,count(distinct(product_code)) unique_products_count
+from dim_product
+group by segment
+order by unique_products_count desc
+
+P4 : 
+
+create view cnt as(
+SELECT distinct(p.product_code),p.segment,p.product,fs.fiscal_year FROM gdb023.dim_product p
+join fact_sales_monthly fs on p.product_code = fs.product_code)
+
+CREATE VIEW four_4 as(
+select distinct(segment),count(product) unique_products,fiscal_year
+from cnt
+group by fiscal_year,segment
+order by fiscal_year,unique_products desc)
+
+create view _4_1 as (
+SELECT segment,(unique_products)unique_products_2020
+FROM gdb023.four_4
+where fiscal_year = 2020)
+ 
+create view _4_2 as (
+SELECT segment,(unique_products)unique_products_2021
+FROM gdb023.four_4
+where fiscal_year = 2021
+)
+
+SELECT _4_1.segment,_4_1.unique_products_2020,_4_2.unique_products_2021,(unique_products_2021-unique_products_2020) difference
+FROM gdb023._4_1
+join _4_2 on _4_1.segment = _4_2.segment
+
+
+P5 : 
+
+create view x_5 as(
+SELECT  d.product_code,d.product,fm.manufacturing_cost,
+row_number()over() rn
+from gdb023.dim_product d
+join gdb023.fact_manufacturing_cost fm on d.product_code = fm.product_code
+order by manufacturing_cost desc)
+
+select product_code,product,manufacturing_cost from x_5
+where rn = 535 or rn = 135
+
+P6 : 
+
+SELECT gdb023.dim_customer.customer_code,gdb023.dim_customer.customer,round(gdb023.fact_pre_invoice_deductions.pre_invoice_discount_pct*100,2) avgerage_discount_percentage
+FROM gdb023.dim_customer
+join gdb023.fact_pre_invoice_deductions on gdb023.dim_customer.customer_code = gdb023.fact_pre_invoice_deductions.customer_code
+where market = 'India' and fiscal_year = 2021
+order by pre_invoice_discount_pct desc
+limit 5
+
+P7 : 
+
+create view gross as (
+SELECT gdb023.fact_sales_monthly.date,gdb023.fact_sales_monthly.product_code,gdb023.fact_sales_monthly.customer_code,
+gdb023.fact_sales_monthly.fiscal_year,
+(gdb023.fact_sales_monthly.sold_quantity*gdb023.fact_gross_price.gross_price) as gross_sales_amount
+FROM gdb023.fact_sales_monthly
+join gdb023.fact_gross_price on gdb023.fact_sales_monthly.product_code = gdb023.fact_gross_price.product_code)
+
+CREATE VIEW seven_7 as(
+select gdb023.dim_customer.customer,gross.date,gross.fiscal_year,gross.gross_sales_amount from gross
+join gdb023.dim_customer on gross.customer_code = gdb023.dim_customer.customer_code
+where customer = 'Atliq Exclusive')
+
+SELECT month(seven_7.date) month,fiscal_year,gross_sales_amount FROM gdb023.seven_7
+group by month,fiscal_year,gross_sales_amount
+order by fiscal_year,month
+
+P8 : 
+
+
+SELECT 
+case when month(gdb023.fact_sales_monthly.date) in (9,10,11) then 'quarter 1'
+when month(gdb023.fact_sales_monthly.date) in (12,1,2) then 'quarter 2'
+when month(gdb023.fact_sales_monthly.date) in (3,4,5) then 'quarter 3'
+when month(gdb023.fact_sales_monthly.date) in
+ (6,7,8) then 'quarter 4' else 'normal'
+end as quarter,
+sum(sold_quantity) total_sold_quantity
+FROM gdb023.fact_sales_monthly
+where fiscal_year = 2020
+group by quarter
+
+P9 : 
+
+create view gross as (
+SELECT gdb023.fact_sales_monthly.date,gdb023.fact_sales_monthly.product_code,gdb023.fact_sales_monthly.customer_code,
+gdb023.fact_sales_monthly.fiscal_year,
+(gdb023.fact_sales_monthly.sold_quantity*gdb023.fact_gross_price.gross_price) as gross_sales_amount
+FROM gdb023.fact_sales_monthly
+join gdb023.fact_gross_price on gdb023.fact_sales_monthly.product_code = gdb023.fact_gross_price.product_code)
+
+create view percent as (
+SELECT gdb023.dim_customer.channel,sum(gross.gross_sales_amount) gross_sales_amount
+FROM gdb023.gross
+join gdb023.dim_customer on gdb023.gross.customer_code = gdb023.dim_customer.customer_code
+where gross.fiscal_year = 2021
+group by dim_customer.channel)
+
+create view nine_9 as(
+SELECT channel,gross_sales_amount,
+round(cume_dist()over(order by gross_sales_amount)*100,2) as percentage
+FROM gdb023.percent)
+
+create view x_9 as (
+SELECT channel,(nine_9.gross_sales_amount) gross_sales_mln
+ FROM gdb023.nine_9
+ group by channel,nine_9.gross_sales_amount)
+
+SELECT *,
+gross_sales_mln*100/sum(gross_sales_mln)over() as percentage
+FROM gdb023.x_9;
+
+P10 : 
+
+create view rnk as (
+SELECT fact_sales_monthly.product_code,sum(fact_sales_monthly.sold_quantity) total_quantity,dim_product.product,dim_product.division
+FROM gdb023.fact_sales_monthly 
+join dim_product on fact_sales_monthly.product_code = dim_product.product_code
+where fiscal_year = 2021
+group by product_code,product,division)
+
+create view t1 as(
+SELECT *,
+rank()over(partition by division order by total_quantity desc) as rank_order
+FROM gdb023.rnk)
+
+SELECT * FROM gdb023.t1
+where rank_order<=3
